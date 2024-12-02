@@ -1,30 +1,42 @@
 package co.edu.ufps.Examen_final.Controller;
 
+import co.edu.ufps.Examen_final.entities.Compra;
+import co.edu.ufps.Examen_final.Services.FacturaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import co.edu.ufps.Examen_final.Dtos.FacturaRequestDTO;
-import co.edu.ufps.Examen_final.Services.FacturaService;
+import java.util.List;
+import java.util.Optional;
 
 @RestController
-@RequestMapping("/factura")
+@RequestMapping("/api/facturas")
 public class FacturaController {
 
     @Autowired
     private FacturaService facturaService;
 
-    @PostMapping("/crear/{tiendaUuid}")
-    public ResponseEntity<?> crearFactura(@RequestBody FacturaRequestDTO facturaRequest,
-                                          @PathVariable String tiendaUuid) {
-        String mensaje = facturaService.procesarFactura(facturaRequest, tiendaUuid);
+    @PostMapping
+    public ResponseEntity<Compra> crearFactura(@RequestBody Compra compra) {
+        Compra nuevaFactura = facturaService.crearFactura(compra);
+        return ResponseEntity.ok(nuevaFactura);
+    }
 
-        return ResponseEntity.ok().body(
-                new ResponseDTO("success", mensaje, null)
-        );
+    @GetMapping
+    public ResponseEntity<List<Compra>> obtenerFacturas() {
+        return ResponseEntity.ok(facturaService.obtenerFacturas());
+    }
+
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Optional<Compra>> obtenerFacturaPorId(@PathVariable Long id) {
+        return ResponseEntity.ok(facturaService.obtenerFacturaPorId(id));
+    }
+
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> eliminarFactura(@PathVariable Long id) {
+        facturaService.eliminarFactura(id);
+        return ResponseEntity.noContent().build();
     }
 }

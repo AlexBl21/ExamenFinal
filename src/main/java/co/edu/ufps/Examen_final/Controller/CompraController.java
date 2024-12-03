@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import co.edu.ufps.Examen_final.Dtos.CompraRequest;
 import co.edu.ufps.Examen_final.Dtos.CompraResponse;
+import co.edu.ufps.Examen_final.Dtos.ConsultarFacturaRequest;
+import co.edu.ufps.Examen_final.Dtos.ConsultarFacturaResponse;
 import co.edu.ufps.Examen_final.Services.CompraService;
 
 @RestController
@@ -32,6 +34,12 @@ public class CompraController {
             return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
         }
     }
+    
+    @PostMapping("/consultar/{tiendaId}")
+    public ConsultarFacturaResponse consultarFactura(@PathVariable String tiendaId, @RequestBody ConsultarFacturaRequest consultaRequest) {
+        return compraService.consultarFactura(tiendaId, consultaRequest);
+    }
+
 }
 
 

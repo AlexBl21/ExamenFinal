@@ -1,12 +1,16 @@
 package co.edu.ufps.Examen_final.Services;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import co.edu.ufps.Examen_final.Dtos.CompraRequest;
 import co.edu.ufps.Examen_final.Dtos.CompraResponse;
+import co.edu.ufps.Examen_final.Dtos.ConsultarFacturaRequest;
+import co.edu.ufps.Examen_final.Dtos.ConsultarFacturaResponse;
 import co.edu.ufps.Examen_final.Dtos.ProductoRequest;
 import co.edu.ufps.Examen_final.Repository.CajeroRepository;
 import co.edu.ufps.Examen_final.Repository.ClienteRepository;
@@ -19,8 +23,8 @@ import co.edu.ufps.Examen_final.entities.Cajero;
 import co.edu.ufps.Examen_final.entities.Cliente;
 import co.edu.ufps.Examen_final.entities.Compra;
 import co.edu.ufps.Examen_final.entities.DetallesCompra;
-import co.edu.ufps.Examen_final.entities.Tienda;
 import co.edu.ufps.Examen_final.entities.Producto;
+import co.edu.ufps.Examen_final.entities.Tienda;
 import co.edu.ufps.Examen_final.entities.Vendedor;
 import jakarta.transaction.Transactional;
 
@@ -50,8 +54,7 @@ public class CompraService {
 
     @Transactional
     public CompraResponse procesarCompra(String tiendaId, CompraRequest compraRequest) {
-
-        // Validar cliente, vendedor, cajero, tienda (lo has hecho correctamente)
+    	// Validar cliente, vendedor, cajero, tienda (lo has hecho correctamente)
 
         Cliente cliente = clienteRepository.findByDocumento(compraRequest.getCliente().getDocumento());
         if (cliente == null) {
@@ -82,22 +85,23 @@ public class CompraService {
         compra.setTotal(0);
         compra.setFecha(LocalDate.now());
 
+        // Guardar la compra primero para obtener el ID
+        compra = compraRepository.save(compra);
+
         double total = 0;
 
         for (ProductoRequest productoRequest : compraRequest.getProductos()) {
-            // Buscar el producto por nombre (cambia referencia por nombre)
-            Producto producto = productoRepository.findByNombre(productoRequest.getReferencia());
+            Producto producto = productoRepository.findByReferencia(productoRequest.getReferencia());
+
             if (producto == null) {
-                throw new RuntimeException("Producto no encontrado con nombre: " + productoRequest.getReferencia());
+                throw new RuntimeException("Producto no encontrado con referencia: " + productoRequest.getReferencia());
             }
 
-            // Calcular el precio con descuento
             double precioConDescuento = producto.getPrecio() * (1 - productoRequest.getDescuento() / 100);
             total += precioConDescuento * productoRequest.getCantidad();
 
-            // Crear los detalles de la compra
             DetallesCompra detalle = new DetallesCompra();
-            detalle.setCompra(compra);
+            detalle.setCompra(compra);  // Aquí asociamos la compra con los detalles
             detalle.setProducto(producto);
             detalle.setCantidad(productoRequest.getCantidad());
             detalle.setPrecio(precioConDescuento);
@@ -113,23 +117,74 @@ public class CompraService {
         // Establecer el total en la compra
         compra.setTotal(total);
 
-        // Guardar la compra
+        // Actualizar la compra con el total final
         compraRepository.save(compra);
 
         // Crear la respuesta
-        String numeroFactura = generarNumeroFactura();
         CompraResponse response = new CompraResponse();
         response.setStatus("success");
-        response.setMessage("La factura se ha creado correctamente con el número: " + numeroFactura);
-        response.setData(new CompraResponse.CompraResponseData(numeroFactura, String.format("%.2f", total), LocalDate.now().toString()));
+        response.setMessage("La factura se ha creado correctamente.");
+        response.setData(new CompraResponse.CompraResponseData(String.valueOf(compra.getId()), String.format("%.2f", total), LocalDate.now().toString()));
 
         return response;
     }
 
-    private String generarNumeroFactura() {
-        // Generar un número de factura único (simulado)
-        return "12";  // Ejemplo de número de factura
+    @Transactional
+    public ConsultarFacturaResponse consultarFactura(String tiendaId, ConsultarFacturaRequest consultaRequest) {
+        // Validar el cajero por token
+        Cajero cajero = cajeroRepository.findByToken(consultaRequest.getToken());
+        if (cajero == null) {
+            throw new RuntimeException("Cajero no autorizado para realizar esta consulta.");
+        }
+
+        // Validar el cliente
+        Cliente cliente = clienteRepository.findByDocumento(consultaRequest.getCliente());
+        if (cliente == null) {
+            throw new RuntimeException("Cliente no encontrado.");
+        }
+
+        // Validar la tienda
+        Compra compra = compraRepository.findById(consultaRequest.getFactura())
+            .orElseThrow(() -> new RuntimeException("Factura no encontrada."));
+
+        if (!compra.getTienda().getUuid().equals(tiendaId)) {
+            throw new RuntimeException("La factura no pertenece a la tienda especificada.");
+        }
+
+        // Construir la respuesta
+        ConsultarFacturaResponse response = new ConsultarFacturaResponse();
+        response.setTotal(compra.getTotal());
+        response.setImpuestos(compra.getImpuestos());
+
+        // Cliente
+        ConsultarFacturaResponse.ClienteData clienteData = new ConsultarFacturaResponse.ClienteData();
+        clienteData.setDocumento(cliente.getDocumento());
+        clienteData.setNombre(cliente.getNombre());
+        clienteData.setTipoDocumento(cliente.getTipoDocumento().getNombre());
+        response.setCliente(clienteData);
+
+        // Productos
+        List<ConsultarFacturaResponse.ProductoData> productos = new ArrayList<>();
+        List<DetallesCompra> detalles = detallesCompraRepository.findByCompra(compra);
+        for (DetallesCompra detalle : detalles) {
+            Producto producto = detalle.getProducto();
+            ConsultarFacturaResponse.ProductoData productoData = new ConsultarFacturaResponse.ProductoData();
+            productoData.setReferencia(producto.getNombre());
+            productoData.setNombre(producto.getNombre());
+            productoData.setCantidad(detalle.getCantidad());
+            productoData.setPrecio(producto.getPrecio());
+            productoData.setDescuento(detalle.getDescuento());
+            productoData.setSubtotal(detalle.getPrecio() * detalle.getCantidad());
+            productos.add(productoData);
+        }
+        response.setProductos(productos);
+
+        // Cajero
+        ConsultarFacturaResponse.CajeroData cajeroData = new ConsultarFacturaResponse.CajeroData();
+        cajeroData.setDocumento(cajero.getDocumento());
+        cajeroData.setNombre(cajero.getNombre());
+        response.setCajero(cajeroData);
+
+        return response;
     }
 }
-
-

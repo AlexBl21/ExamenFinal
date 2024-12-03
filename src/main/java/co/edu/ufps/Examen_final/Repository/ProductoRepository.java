@@ -4,5 +4,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import co.edu.ufps.Examen_final.entities.Producto;
 
 public interface ProductoRepository extends JpaRepository<Producto, Long> {
-	Producto findByNombre(String nombre);
+	Producto findByReferencia(String referencia);
 }
